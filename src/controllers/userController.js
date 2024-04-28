@@ -4,64 +4,63 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
 exports.signup = async (req, res, next) => {
-    const { userName, email, password, phoneNumber, userType } = req.body;
+  const { userName, email, password, phoneNumber, userType } = req.body;
 
-    if(!userName || !email || !req.file){
-      return res.status(400).json({
-        "message":"please provide all fields"
-      })
+  if (!userName || !email) {
+    return res.status(400).json({
+      message: "please provide all required fields",
+    });
+  }
+
+  try {
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    // check if the email already exists
+    const existingUser = await User.findOne({ $or: [{ userName }, { email }] });
+    if (existingUser) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Email or username already exists" });
     }
-    try {
 
-        const hashedPassword = await bcrypt.hash(password,12); 
+    let newUser = new User({
+      userName,
+      email,
+      password: hashedPassword,
+      phoneNumber,
+      userType,
+    });
 
-        // check if the email already exitst
-        const existingUser = await User.findOne({ $or: [{ userName }, { email }] });
-        if (existingUser) {
-            return res.status(400).json({ success: false, message: 'Email or username already exists' });
-        }
-        // const userExist = await User.findOne({email:req.email});
-        // console.log(userExist)
-        // if so return that to the front end 
-        // email already in use 
-        let photoPath =    req.file.path;
-        let newUser;
+    // Check if the user type is 'company' and handle additional fields
+    if (userType === "company") {
+      const { ceoName, location, websiteLink, description } = req.body;
+      if (!ceoName || !location || !websiteLink) {
+        return res
+          .status(400)
+          .json({
+            message: "Please provide all required fields for company signup",
+          });
+      }
 
-            // Handle consumer signup
-            newUser = new User({
-                userName,
-                email,
-                password : hashedPassword,
-                phoneNumber,
-                userType,
-                photo: photoPath, // Assuming photo upload is handled by multer
-            });
-        if (userType === 'company') {
-            // Handle company signup
-            const { ceoName, location, websiteLink, description } = req.body;
-            // add validation to ensure that this data is handed , 
-            // do this here
-            if(!ceoName || !location || !websiteLink){
-                return res.status(400).json({
-                  "message":"please provide all fields"
-                })
-              }
-
-            newUser.ceoName = ceoName;
-            newUser.location =  location;
-            newUser.websiteLink=  websiteLink;
-            newUser.description=  description;
-        }
-
-        await newUser.save();
-        res.status(201).json({
-            success: true,
-            data: newUser,
-        });
-    } catch (err) {
-        next(err);
+      newUser.ceoName = ceoName;
+      newUser.location = location;
+      newUser.websiteLink = websiteLink;
+      newUser.description = description;
     }
+    
+    if (req.file) {
+        // Check if a photo was uploaded
+        newUser.photo = req.file.path;
+      }
+
+    await newUser.save();
+
+    res.status(201).json({ success: true, data: newUser });
+  } catch (err) {
+    next(err);
+  }
 };
+
 
 exports.login = async (req, res, next) => {
     try{
